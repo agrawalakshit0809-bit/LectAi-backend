@@ -1,0 +1,14 @@
+﻿node_modules/
+.env
+yt-dlp.exe
+ngrok.exe
+*.exe
+*.webm
+*.webm.part
+*.part
+*.vtt
+*.mp3
+temp_*
+cookies.txt
+audio.*
+subtitles/

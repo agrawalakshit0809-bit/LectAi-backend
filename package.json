@@ -1,0 +1,17 @@
+{
+  "name": "youtube-agent-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.14.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "groq-sdk": "^1.1.2",
+    "xml2js": "^0.6.2",
+    "youtube-transcript": "^1.x"
+  }
+}
