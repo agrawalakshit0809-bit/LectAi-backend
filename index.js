@@ -10,6 +10,7 @@ const app = express();
 app.use(cors({
     origin: [
         "http://localhost:3000",
+        "https://lect-ai-frontend.vercel.app",
         process.env.FRONTEND_URL
     ],
     credentials: true
@@ -239,13 +240,15 @@ app.post("/timestamps", async (req, res) => {
 });
 
 // ── Keep Render free tier awake ───────────────────────────────
-setInterval(() => {
-    const https = require('https');
-    https.get('https://lectai-backend.onrender.com/health', () => {
-        console.log("💓 Keep-alive ping sent");
-    }).on('error', () => {});
-}, 14 * 60 * 1000);
-
+// Keep-alive starts 2 minutes after boot
+setTimeout(() => {
+    setInterval(() => {
+        const https = require('https');
+        https.get('https://lectai-backend.onrender.com/health', () => {
+            console.log("💓 Keep-alive ping sent");
+        }).on('error', () => {});
+    }, 14 * 60 * 1000);
+}, 2 * 60 * 1000);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () =>
     console.log(`🚀 LectAI Backend running on port ${PORT}`)

@@ -4,24 +4,24 @@ import os
 import warnings
 warnings.filterwarnings("ignore")
 
-def setup_cookies():
-    cookies_content = os.environ.get("YOUTUBE_COOKIES", "")
-    if cookies_content:
-        cookies_path = "/tmp/yt_cookies.txt"
-        with open(cookies_path, "w") as f:
-            f.write(cookies_content)
-        return cookies_path
-    return None
-
 def get_transcript():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No Video ID provided"}))
         return
 
     video_id = sys.argv[1]
-    cookies_path = setup_cookies()
+    # Node.js passes cookies path as second argument
+    cookies_path = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    # Verify cookies file actually exists and has content
+    if cookies_path and os.path.exists(cookies_path):
+        size = os.path.getsize(cookies_path)
+        print(f"🍪 Using cookies file: {cookies_path} ({size} bytes)", file=sys.stderr)
+    else:
+        cookies_path = None
+        print("⚠️ No cookies file found", file=sys.stderr)
 
-    # Method 1: youtube_transcript_api (fast)
+    # Method 1: youtube_transcript_api (fast, no cookies needed)
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         api = YouTubeTranscriptApi()
@@ -37,10 +37,10 @@ def get_transcript():
             result = [{'text': s.text, 'start': s.start, 'duration': s.duration} for s in transcript]
             print(json.dumps(result))
             return
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Method 1 failed: {e}", file=sys.stderr)
 
-    # Method 2: yt-dlp with vtt format (more compatible)
+    # Method 2: yt-dlp with cookies
     try:
         import yt_dlp
         import tempfile
@@ -54,7 +54,7 @@ def get_transcript():
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': ['en', 'en-orig', 'en-US'],
-                'subtitlesformat': 'vtt',          # ← changed from json3 to vtt
+                'subtitlesformat': 'vtt',
                 'outtmpl': os.path.join(tmpdir, '%(id)s.%(ext)s'),
                 'quiet': True,
                 'no_warnings': True,
@@ -62,11 +62,11 @@ def get_transcript():
             }
             if cookies_path:
                 ydl_opts['cookiefile'] = cookies_path
+                print(f"✅ yt-dlp using cookiefile", file=sys.stderr)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
 
-            # Find .vtt subtitle file
             sub_file = None
             for fname in os.listdir(tmpdir):
                 if fname.endswith('.vtt'):
@@ -77,63 +77,33 @@ def get_transcript():
                 print(json.dumps({"error": "No captions found for this video"}))
                 return
 
-            # Parse VTT file
             transcript_data = []
             with open(sub_file, 'r', encoding='utf-8') as f:
                 content = f.read()
 
-            # Remove WEBVTT header and NOTE blocks
-            content = re.sub(r'WEBVTT.*?\n\n', '', content, flags=re.DOTALL, count=1)
-            content = re.sub(r'NOTE\n.*?\n\n', '', content, flags=re.DOTALL)
-
-            # Parse timestamp blocks
             blocks = content.strip().split('\n\n')
             seen_texts = set()
-
             for block in blocks:
                 lines = block.strip().split('\n')
-                # Find timestamp line
-                time_line = None
-                for line in lines:
-                    if '-->' in line:
-                        time_line = line
-                        break
+                time_line = next((l for l in lines if '-->' in l), None)
                 if not time_line:
                     continue
-
-                # Parse start time
                 try:
                     start_str = time_line.split('-->')[0].strip()
                     parts = start_str.replace(',', '.').split(':')
-                    if len(parts) == 3:
-                        start = float(parts[0])*3600 + float(parts[1])*60 + float(parts[2])
-                    else:
-                        start = float(parts[0])*60 + float(parts[1])
+                    start = float(parts[0])*3600 + float(parts[1])*60 + float(parts[2]) if len(parts)==3 else float(parts[0])*60 + float(parts[1])
                 except:
                     continue
-
-                # Get text lines (after timestamp)
-                text_lines = []
-                for line in lines:
-                    if '-->' not in line and not line.startswith('WEBVTT') and line.strip():
-                        # Remove VTT tags like <00:00:00.000><c>text</c>
-                        clean = re.sub(r'<[^>]+>', '', line).strip()
-                        if clean:
-                            text_lines.append(clean)
-
+                text_lines = [re.sub(r'<[^>]+>', '', l).strip() for l in lines if '-->' not in l and l.strip()]
                 text = ' '.join(text_lines).strip()
                 if text and text not in seen_texts:
                     seen_texts.add(text)
-                    transcript_data.append({
-                        'text': text,
-                        'start': start,
-                        'duration': 0
-                    })
+                    transcript_data.append({'text': text, 'start': start, 'duration': 0})
 
-            if transcript_data:
-                print(json.dumps(transcript_data))
-            else:
-                print(json.dumps({"error": "Could not parse captions"}))
+        if transcript_data:
+            print(json.dumps(transcript_data))
+        else:
+            print(json.dumps({"error": "Could not parse captions"}))
 
     except Exception as e:
         print(json.dumps({"error": f"No captions available: {str(e)}"}))
