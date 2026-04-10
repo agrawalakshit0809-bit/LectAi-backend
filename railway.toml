@@ -1,5 +1,6 @@
 [build]
-nixpacksPlan = "python"
+[build.nixpacksPlan]
+plan = "python"
 
 [variables]
 PYTHON_VERSION = "3.10"
