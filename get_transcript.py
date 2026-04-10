@@ -1,7 +1,17 @@
 import sys
 import json
+import os
 import warnings
 warnings.filterwarnings("ignore")
+
+def setup_cookies():
+    cookies_content = os.environ.get("YOUTUBE_COOKIES", "")
+    if cookies_content:
+        cookies_path = "/tmp/yt_cookies.txt"
+        with open(cookies_path, "w") as f:
+            f.write(cookies_content)
+        return cookies_path
+    return None
 
 def get_transcript():
     if len(sys.argv) < 2:
@@ -9,17 +19,21 @@ def get_transcript():
         return
 
     video_id = sys.argv[1]
+    cookies_path = setup_cookies()
 
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        api = YouTubeTranscriptApi()  # ✅ 1.2.4 requires instance
+
+        # Use cookies if available (bypasses cloud IP blocks)
+        if cookies_path:
+            api = YouTubeTranscriptApi(cookie_path=cookies_path)
+        else:
+            api = YouTubeTranscriptApi()
 
         try:
-            # Try English first
             transcript = api.fetch(video_id, languages=['en', 'en-US', 'en-GB', 'en-IN'])
         except Exception:
             try:
-                # Try auto-generated in any language
                 transcript_list = api.list(video_id)
                 transcript = None
                 for t in transcript_list:
