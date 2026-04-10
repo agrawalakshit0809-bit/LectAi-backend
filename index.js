@@ -266,6 +266,15 @@ app.post("/ask", async (req, res) => {
     }
 });
 const PORT = process.env.PORT || 5000;
+// Temp debug route - remove after testing
+app.get("/debug", (req, res) => {
+    const cookies = process.env.YOUTUBE_COOKIES;
+    res.json({
+        cookies_set: !!cookies,
+        cookies_length: cookies ? cookies.length : 0,
+        first_line: cookies ? cookies.split('\n')[0] : 'NOT SET'
+    });
+});
 app.listen(PORT, "0.0.0.0", () => 
     console.log(`🚀 LectAI Backend running on port ${PORT}`)
 );
