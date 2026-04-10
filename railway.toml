@@ -9,4 +9,4 @@ PYTHON_VERSION = "3.10"
 aptPkgs = ["ffmpeg"]
 
 [deploy]
-startCommand = "python get_transcript.py"
+startCommand = "python app.py"
