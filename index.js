@@ -5,6 +5,7 @@ const Groq = require("groq-sdk");
 
 const app = express();
 
+// ── CORS SETUP ───────────────────────────────────────────────
 app.use(cors({
     origin: [
         "http://localhost:3000",
@@ -13,19 +14,20 @@ app.use(cors({
     ].filter(Boolean),
     credentials: true
 }));
+
 app.use(express.json());
 
 // ── UTILITY: Syllabus Cleaner ────────────────────────────────
 const cleanSyllabus = (text) => {
     return text
-        .replace(/\d+\s*of\s*\d+/g, "") 
-        .replace(/[^\x20-\x7E\n]/g, "") 
-        .replace(/\n\s*\n/g, '\n')     
+        .replace(/\d+\s*of\s*\d+/g, "")
+        .replace(/[^\x20-\x7E\n]/g, "")
+        .replace(/\n\s*\n/g, '\n')
         .trim()
         .substring(0, 6000);
 };
 
-// ── Groq Multi-Key Rotation (Already Perfect) ─────────────────
+// ── GROQ MULTI-KEY ROTATION ─────────────────────────────────
 const GROQ_KEYS = [
     process.env.GROQ_API_KEY_1,
     process.env.GROQ_API_KEY_2,
@@ -46,110 +48,179 @@ function rotateKey() {
 
 async function groqChat(messages, maxTokens = 4000) {
     let attempts = 0;
+
     while (attempts < GROQ_KEYS.length) {
         try {
             const groq = getGroqClient();
+
             const chat = await groq.chat.completions.create({
                 model: "llama-3.3-70b-versatile",
                 max_tokens: maxTokens,
                 temperature: 0.3,
                 messages,
             });
+
             return chat.choices[0].message.content;
+
         } catch (e) {
             if (e.status === 429) {
                 rotateKey();
                 attempts++;
             } else {
+                console.error("Groq error:", e);
                 throw e;
             }
         }
     }
+
     throw new Error("All API keys rate limited.");
 }
 
-// ── Health Check ─────────────────────────────────────────────
-app.get("/health", (req, res) => res.json({ status: "awake", app: "ExamPilot" }));
+// ── HEALTH CHECK ─────────────────────────────────────────────
+app.get("/health", (req, res) => {
+    res.json({ status: "awake", app: "ExamPilot" });
+});
 
-// ── EXAMPILOT CORE ROUTE (Day 1 - Final Version) ─────────────
+// ── EXAMPILOT CORE ROUTE ─────────────────────────────────────
 app.post("/study-plan", async (req, res) => {
-    const { syllabus, examDate, hoursPerDay = 4, university = "Indian University", subject = "" } = req.body;
-
-    if (!syllabus || !examDate) {
-        return res.status(400).json({ 
-            success: false, 
-            error: "Syllabus and examDate are required" 
-        });
-    }
-
-    const daysLeft = Math.max(1, Math.ceil(
-        (new Date(examDate) - new Date()) / (1000 * 60 * 60 * 24)
-    ));
-
-    const cleanedSyllabus = cleanSyllabus(syllabus);
-
     try {
+        const {
+            syllabus,
+            examDate,
+            hoursPerDay = 4,
+            university = "Indian University",
+            subject = ""
+        } = req.body;
+
+        // 🔒 Validation
+        if (!syllabus || !examDate) {
+            return res.status(400).json({
+                success: false,
+                error: "Syllabus and examDate are required"
+            });
+        }
+
+        if (syllabus.length < 20) {
+            return res.status(400).json({
+                success: false,
+                error: "Syllabus too short. Please paste full syllabus."
+            });
+        }
+
+        // 📅 Correct Date Calculation
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const exam = new Date(examDate);
+        exam.setHours(0, 0, 0, 0);
+
+        if (isNaN(exam.getTime())) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid exam date"
+            });
+        }
+
+        const daysLeft = Math.max(1, Math.ceil(
+            (exam - today) / (1000 * 60 * 60 * 24)
+        ));
+
+        console.log("📥 Request:", {
+            daysLeft,
+            hoursPerDay,
+            university,
+            subject
+        });
+
+        const cleanedSyllabus = cleanSyllabus(syllabus);
+
+        // 🧠 AI CALL
         const plan = await groqChat([
             {
                 role: "system",
-                content: `You are ExamPilot — an expert Indian university exam coach. You deeply understand VIT, Mumbai University, Delhi University, Anna University exam patterns, marking schemes, and student panic. Create practical, motivating, and highly exam-oriented study plans.`
+                content: `You are ExamPilot — an expert Indian university exam coach.
+
+You understand:
+- Indian exam patterns (VTU, VIT, MU, DU, Anna University)
+- Students are under time pressure
+- Focus is scoring marks, not deep theory
+
+You create highly practical, motivating, and realistic study plans.`
             },
             {
                 role: "user",
                 content: `Create a ${daysLeft}-day personalized study plan for a stressed Indian college student.
 
+IMPORTANT:
+- Focus on scoring marks
+- Prioritize high-weightage and repeated topics
+- Keep plan realistic (student may procrastinate)
+- Include revision cycles
+
 University: ${university}
 Subject: ${subject}
 Hours per day: ${hoursPerDay}
+
 Syllabus:
 ${cleanedSyllabus}
 
-Return ONLY in this exact clean markdown format (no extra text):
+Return ONLY in this exact clean markdown format:
 
 **EXAMPILOT — ${daysLeft}-DAY PLAN**
 ${university} | ${subject}
 
+For EACH DAY include:
+
 **DAY 1 — [Day Name]**
-- Morning (X hrs): Topic...
-- Evening (X hrs): Topic...
+- Morning (${Math.ceil(hoursPerDay / 2)} hrs): Topic...
+- Evening (${Math.floor(hoursPerDay / 2)} hrs): Topic...
 
 **Key Points (Exam-Focused):**
-- Point 1
-- Point 2
-...
+- Important concepts
+- Definitions / formulas / derivations
 
 **Practice Questions (University Exam Style):**
-1. Question 1
-2. Question 2
-...
+1. Question
+2. Question
+3. Question
+4. Question
+5. Question
 
 **Memory Tricks:**
-...
+- Mnemonics / shortcuts
 
-Repeat the exact same format for every day until the last day.
-At the very end add:
+Repeat for ALL days.
 
-**EXAM DAY MORNING CHECKLIST** (only 10-15 mins)
+At the end include:
+
+**FINAL REVISION STRATEGY (1 DAY BEFORE EXAM)**
+
+**EXAM DAY MORNING CHECKLIST**
 - Quick revision tips
-- What to do right before exam
-- Encouragement message`
+- Confidence boost`
             }
         ]);
 
-        res.json({
+        return res.json({
             success: true,
             daysLeft,
             plan,
             message: "✅ Your personalized study plan is ready!"
         });
+
     } catch (error) {
         console.error("Study plan error:", error);
-        res.status(500).json({ 
-            success: false, 
-            error: "Failed to generate plan. Please try again." 
+
+        return res.status(500).json({
+            success: false,
+            error: "Failed to generate plan. Please try again."
         });
     }
 });
 
+// ── SERVER START ─────────────────────────────────────────────
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 ExamPilot Engine Live on ${PORT}`));
+
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 ExamPilot Engine Live on ${PORT}`);
+});
