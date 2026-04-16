@@ -136,4 +136,8 @@ End with checklist.`,
   }
 });
 
-app.listen(5001, () => console.log("🚀 Running"));
+const PORT = process.env.PORT || 5001;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 ExamPilot running on ${PORT}`);
+});
