@@ -99,7 +99,7 @@ app.post("/study-plan", async (req, res) => {
             });
         }
 
-        // 📅 Correct Date Calculation
+        // 📅 Date Calculation
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -117,8 +117,12 @@ app.post("/study-plan", async (req, res) => {
             (exam - today) / (1000 * 60 * 60 * 24)
         ));
 
+        // 🆕 REAL DAY CONTEXT
+        const todayStr = today.toDateString(); // e.g., Thu Apr 16 2026
+
         console.log("📥 Request:", {
             daysLeft,
+            todayStr,
             hoursPerDay,
             university,
             subject
@@ -141,13 +145,13 @@ You create highly practical, motivating, and realistic study plans.`
             },
             {
                 role: "user",
-                content: `Create a ${daysLeft}-day personalized study plan for a stressed Indian college student.
+                content: `Create a ${daysLeft}-day personalized study plan.
 
 IMPORTANT:
-- Focus on scoring marks
-- Prioritize high-weightage and repeated topics
-- Keep plan realistic (student may procrastinate)
-- Include revision cycles
+- Today is ${todayStr}
+- Use REAL calendar days (correct weekday names)
+- Day 1 must match today's actual weekday
+- Continue days sequentially (Thu → Fri → Sat...)
 
 University: ${university}
 Subject: ${subject}
@@ -163,7 +167,7 @@ ${university} | ${subject}
 
 For EACH DAY include:
 
-**DAY 1 — [Day Name]**
+**DAY 1 — [Real Day Name]**
 - Morning (${Math.ceil(hoursPerDay / 2)} hrs): Topic...
 - Evening (${Math.floor(hoursPerDay / 2)} hrs): Topic...
 
